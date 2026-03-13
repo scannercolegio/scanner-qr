@@ -4,34 +4,98 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Scanner QR</title>
-  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
-    body { margin: 0; font-family: sans-serif; background: #000; }
-    #reader { width: 100%; max-width: 400px; margin: 0 auto; }
-    #status { color: white; text-align: center; padding: 10px; font-size: 1rem; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; font-family: sans-serif; }
+    #status { color: white; text-align: center; padding: 12px; font-size: 1rem; width: 100%; }
+    #container { position: relative; width: 100%; max-width: 400px; }
+    video { width: 100%; display: block; }
+    canvas { display: none; }
+    #overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 200px; height: 200px; border: 3px solid #00ff00; border-radius: 8px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.5); }
+    #btnIniciar { margin-top: 20px; padding: 14px 30px; background: #667eea; color: white; border: none; border-radius: 8px; font-size: 1rem; cursor: pointer; }
   </style>
 </head>
 <body>
-  <div id="status">Iniciando cámara...</div>
-  <div id="reader"></div>
+  <div id="status">Toca el botón para activar la cámara</div>
+  <div id="container">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+    <div id="overlay"></div>
+  </div>
+  <button id="btnIniciar">📷 Activar Cámara</button>
 
-  <script>
-    const scanner = new Html5Qrcode("reader");
+  <script type="module">
+    // Importar librería de detección QR (jsQR)
+    const jsQR = (await import('https://esm.sh/jsqr@1.4.0')).default;
 
-    scanner.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: { width: 250, height: 250 } },
-      (decodedText) => {
-        window.parent.postMessage({ tipo: 'qr_escaneado', codigo: decodedText }, '*');
-        document.getElementById('status').textContent = 'Código escaneado: ' + decodedText;
-      },
-      () => {}
-    ).then(() => {
-      document.getElementById('status').textContent = 'Esperando código QR...';
-    }).catch(err => {
-      document.getElementById('status').textContent = 'Error: ' + err;
-      window.parent.postMessage({ tipo: 'error_camara', mensaje: err.toString() }, '*');
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const status = document.getElementById('status');
+    const btnIniciar = document.getElementById('btnIniciar');
+    const ctx = canvas.getContext('2d');
+    let scanning = false;
+    let lastCode = '';
+    let lastTime = 0;
+
+    btnIniciar.addEventListener('click', async () => {
+      try {
+        btnIniciar.style.display = 'none';
+        status.textContent = 'Iniciando cámara...';
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } }
+        });
+
+        video.srcObject = stream;
+        await video.play();
+
+        status.textContent = 'Esperando código QR...';
+        scanning = true;
+        requestAnimationFrame(scanFrame);
+
+      } catch (err) {
+        status.textContent = 'Error: ' + err.message;
+        btnIniciar.style.display = 'block';
+        window.parent.postMessage({ tipo: 'error_camara', mensaje: err.message }, '*');
+      }
     });
+
+    function scanFrame() {
+      if (!scanning) return;
+
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: 'dontInvert'
+        });
+
+        if (code) {
+          const now = Date.now();
+          // Evitar enviar el mismo código 2 veces seguidas en menos de 3 segundos
+          if (code.data !== lastCode || (now - lastTime) > 3000) {
+            lastCode = code.data;
+            lastTime = now;
+            status.textContent = '✅ Escaneado: ' + code.data;
+            window.parent.postMessage({ tipo: 'qr_escaneado', codigo: code.data }, '*');
+
+            // Pausa 3 segundos antes de seguir escaneando
+            scanning = false;
+            setTimeout(() => {
+              scanning = true;
+              status.textContent = 'Esperando código QR...';
+              requestAnimationFrame(scanFrame);
+            }, 3000);
+            return;
+          }
+        }
+      }
+
+      requestAnimationFrame(scanFrame);
+    }
   </script>
 </body>
 </html>
