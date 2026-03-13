@@ -441,7 +441,10 @@
     };
 
     function scanFrame() {
-      if (!scanning) return;
+      if (!scanning) {
+        requestAnimationFrame(scanFrame);  // Seguir el loop aunque no esté escaneando
+        return;
+      }
 
       if (video.readyState === video.HAVE_ENOUGH_DATA) {
         canvas.width = video.videoWidth;
@@ -462,7 +465,6 @@
             setStatus('✅ Código escaneado — ' + movimiento, 'exito');
             mostrarResultado('Código enviado: ' + code.data, 'exito');
 
-            // Enviar al padre con el movimiento seleccionado
             if (opener) {
               opener.postMessage({
                 tipo: 'qr_escaneado',
@@ -471,16 +473,18 @@
               }, '*');
             }
 
+            // Pausar 3 segundos antes de volver a escanear
             scanning = false;
             setTimeout(() => {
+              lastCode = '';  // Limpiar último código para permitir el mismo QR
               scanning = true;
               setStatus('Esperando código QR...', 'activo');
             }, 3000);
-            return;
           }
         }
       }
-      requestAnimationFrame(scanFrame);
+
+      requestAnimationFrame(scanFrame);  // Siempre continuar el loop
     }
   </script>
 </body>
