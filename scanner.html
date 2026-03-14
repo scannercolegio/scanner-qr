@@ -453,19 +453,19 @@
       document.getElementById('btnSalida').classList.toggle('active', tipo === 'SALIDA');
     };
 
-   function setStatus(texto, tipo) {
+   function setStatus(texto, tipo, icono_override) {
       const iconos = {
-        activo: '<i class="fas fa-circle-notch fa-spin"></i>',
+        activo: '<i class="fas fa-qrcode"></i>',
+        procesando: '<i class="fas fa-circle-notch fa-spin"></i>',
         exito: '<i class="fas fa-check-circle"></i>',
         error: '<i class="fas fa-exclamation-circle"></i>',
-        qr: '<i class="fa fa-qrcode"></i>',
         '': '<i class="fas fa-clock"></i>'
       };
 
       const icono = iconos[tipo] || iconos[''];
       document.getElementById('statusText').innerHTML = icono + ' ' + texto;
       statusDot.className = 'status-dot ' + (tipo || '');
-    }
+    }}
 
    function mostrarResultado(datos, tipo) {
       resultadoCard.className = 'resultado-card ' + tipo;
@@ -547,7 +547,7 @@
             lastCode = code.data;
             lastTime = now;
 
-            setStatus('Procesando...', 'activo');
+            setStatus('Procesando...', 'procesando');
             mostrarResultado({
               nombre: 'Verificando...',
               detalle: 'Consultando servidor...'
