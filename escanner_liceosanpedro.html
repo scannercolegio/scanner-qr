@@ -438,14 +438,16 @@
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
     const resultadoCard = document.getElementById('resultadoCard');
+    const resultadoTexto = document.getElementById('resultadoTexto');
+    const resultadoIcon = document.getElementById('resultadoIcon');
     const scanOverlay = document.getElementById('scanOverlay');
     const btnIniciar = document.getElementById('btnIniciar');
 
     let scanning = false;
     let lastCode = '';
     let lastTime = 0;
-    let frameCount = 0;  // Solo declarado UNA vez aquí
     let movimiento = 'ENTRADA';
     const opener = window.opener;
 
@@ -456,7 +458,7 @@
       document.getElementById('btnSalida').classList.toggle('active', tipo === 'SALIDA');
     };
 
-    function setStatus(texto, tipo) {
+   function setStatus(texto, tipo) {
       const iconos = {
         activo: '<i class="fas fa-qrcode"></i>',
         procesando: '<i class="fas fa-circle-notch fa-spin"></i>',
@@ -464,18 +466,19 @@
         error: '<i class="fas fa-exclamation-circle"></i>',
         '': '<i class="fas fa-clock"></i>'
       };
+
       const icono = iconos[tipo] || iconos[''];
       document.getElementById('statusText').innerHTML = icono + ' ' + texto;
       statusDot.className = 'status-dot ' + (tipo || '');
     }
 
-    function mostrarResultado(datos, tipo) {
+   function mostrarResultado(datos, tipo) {
       resultadoCard.className = 'resultado-card ' + tipo;
 
       const iconos = {
-        exito: '<i class="fas fa-check-circle" style="color:#11b311; font-size:1.8rem;"></i>',
+        exito: '<i class="fas fa-check-circle" style="color:#2ecc71; font-size:1.8rem;"></i>',
         error: '<i class="fas fa-times-circle" style="color:#e74c3c; font-size:1.8rem;"></i>',
-        procesando: '<i class="fas fa-spinner fa-spin" style="color:#07adeb; font-size:1.8rem;"></i>'
+        procesando: '<i class="fas fa-spinner fa-spin" style="color:#667eea; font-size:1.8rem;"></i>'
       };
 
       const titulos = {
@@ -488,96 +491,110 @@
       document.getElementById('resultadoTitulo').textContent = titulos[tipo] || titulos.procesando;
       document.getElementById('resultadoNombre').textContent = datos.nombre || '';
       document.getElementById('resultadoDetalle').textContent = datos.detalle || '';
+
     }
 
     // Iniciar cámara
-    window.iniciarCamara = async function() {
-      try {
-        btnIniciar.style.display = 'none';
-        setStatus('Iniciando cámara...', 'procesando');
+   window.iniciarCamara = async function() {
+  try {
+    btnIniciar.style.display = 'none';
+    setStatus('Iniciando cámara...', 'procesando');
 
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          }
-        });
-
-        video.srcObject = stream;
-        await video.play();
-
-        scanOverlay.style.display = 'flex';
-        setStatus('Esperando código QR...', 'activo');
-        scanning = true;
-        requestAnimationFrame(scanFrame);
-
-      } catch (err) {
-        setStatus('Error: ' + err.message, 'error');
-        btnIniciar.style.display = 'flex';
-        if (opener) {
-          opener.postMessage({ tipo: 'error_camara', mensaje: err.message }, '*');
-        }
+    // Optimizamos la configuración para dispositivos móviles
+    const constraints = {
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1280 }, // Resolución HD para captar mejor los módulos del QR
+        height: { ideal: 720 },
+        // Intentar activar enfoque automático continuo si el navegador lo permite
+        focusMode: { ideal: "continuous" } 
       }
     };
 
-    function scanFrame() {
-      if (!scanning) {
-        requestAnimationFrame(scanFrame);
-        return;
-      }
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
-      frameCount++;
-      if (frameCount % 2 !== 0) {
-        requestAnimationFrame(scanFrame);
-        return;
-      }
+    video.srcObject = stream;
+    await video.play();
 
-      if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        canvas.width = 640;
-        canvas.height = 480;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    scanOverlay.style.display = 'flex';
+    setStatus('Esperando código QR...', 'activo');
+    scanning = true;
+    requestAnimationFrame(scanFrame);
 
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: 'dontInvert'
-        });
-
-        if (code && code.data && code.data.trim() !== '') {
-          const now = Date.now();
-          if (code.data !== lastCode || (now - lastTime) > 3000) {
-            lastCode = code.data;
-            lastTime = now;
-
-            setStatus('Procesando...', 'procesando');
-            mostrarResultado({
-              nombre: 'Verificando...',
-              detalle: 'Consultando servidor...'
-            }, 'procesando');
-
-            if (opener) {
-              opener.postMessage({
-                tipo: 'qr_escaneado',
-                codigo: code.data,
-                movimiento: movimiento
-              }, '*');
-            }
-
-            scanning = false;
-            setTimeout(() => {
-              lastCode = '';
-              scanning = true;
-              setStatus('Esperando código QR...', 'activo');
-            }, 3000);
-
-            requestAnimationFrame(scanFrame);
-            return;
-          }
-        }
-      }
-
-      requestAnimationFrame(scanFrame);
+  } catch (err) {
+    setStatus('Error: ' + err.message, 'error');
+    btnIniciar.style.display = 'flex';
+    if (opener) {
+      opener.postMessage({ tipo: 'error_camara', mensaje: err.message }, '*');
     }
+  }
+};
+
+    let frameCount = 0;
+
+    function scanFrame() {
+  if (!scanning) {
+    requestAnimationFrame(scanFrame);
+    return;
+  }
+
+  // Ahora procesamos 1 de cada 2 frames (mucho más rápido que 1 de cada 10)
+  frameCount++;
+  if (frameCount % 2 !== 0) {
+    requestAnimationFrame(scanFrame);
+    return;
+  }
+
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    // Escalar el canvas a un tamaño manejable (640px) 
+    // Esto acelera la detección en jsQR sin perder precisión
+    canvas.width = 640;
+    canvas.height = 480;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: 'dontInvert'
+    });
+
+    if (code && code.data && code.data.trim() !== '') {
+      const now = Date.now();
+      // Mantenemos la protección para no registrar dos veces el mismo QR por error
+      if (code.data !== lastCode || (now - lastTime) > 3000) {
+        lastCode = code.data;
+        lastTime = now;
+
+        setStatus('Procesando...', 'procesando');
+        mostrarResultado({
+          nombre: 'Verificando...',
+          detalle: 'Consultando servidor...'
+        }, 'procesando');
+
+        if (opener) {
+          opener.postMessage({
+            tipo: 'qr_escaneado',
+            codigo: code.data,
+            movimiento: movimiento
+          }, '*');
+        }
+
+        scanning = false;
+        
+        // Tiempo de espera antes de permitir el siguiente escaneo
+        setTimeout(() => {
+          lastCode = '';
+          scanning = true;
+          setStatus('Esperando código QR...', 'activo');
+        }, 3000);
+
+        requestAnimationFrame(scanFrame);
+        return;
+      }
+    }
+  }
+
+  requestAnimationFrame(scanFrame);
+}
 
     // Recibir resultado del servidor desde GAS
     window.addEventListener('message', function(event) {
@@ -585,12 +602,15 @@
 
       if (event.data.tipo === 'resultado_registro') {
         if (event.data.exito) {
+          // Status solo dice "Registro exitoso" sin nombre
           setStatus('Registro exitoso', 'exito');
+          // La tarjeta muestra el nombre completo del estudiante
           mostrarResultado({
             nombre: event.data.nombre,
             detalle: event.data.detalle
           }, 'exito');
 
+          // Después de 3 segundos, volver a "Esperando..."
           setTimeout(() => {
             setStatus('Esperando código QR...', 'activo');
           }, 3000);
@@ -608,7 +628,7 @@
         }
       }
     });
-
+    
   </script>
 </body>
 </html>
